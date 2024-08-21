@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Chronos</string>
+    <string name="title_activity_main">Chronos</string>
+    <string name="system">系统</string>
+    <string name="gps">GPS</string>
+    <string name="network">网络</string>
+    <string name="not_available">不可用</string>
+    <string name="x_not_available">%1$s不可用</string>
+    <string name="grant_permissions">授予权限</string>
+    <string name="allow_fine_location">允许精确位置</string>
+</resources>
