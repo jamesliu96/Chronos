@@ -70,6 +70,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.location.LocationListenerCompat
 import androidx.core.view.HapticFeedbackConstantsCompat
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.preferencesDataStore
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.coroutines.android.awaitFrame
@@ -104,6 +107,19 @@ fun App() {
     }
     var magic by remember {
         mutableStateOf(false)
+    }
+
+    val settings = context.settings
+    val magicKey = booleanPreferencesKey("magic")
+    LaunchedEffect(Unit) {
+        settings.data.collect {
+            magic = it[magicKey] ?: false
+        }
+    }
+    LaunchedEffect(magic) {
+        settings.edit {
+            it[magicKey] = magic
+        }
     }
 
     val now = rememberNow()
@@ -168,17 +184,14 @@ fun App() {
                     enter = slideInVertically { it } + fadeIn(),
                     exit = slideOutVertically { it } + fadeOut(),
                 ) {
-                    Column {
-                        SmallFloatingActionButton({ magic = !magic }) {
-                            AnimatedContent(
-                                if (magic) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
-                                label = ""
-                            ) {
-                                Icon(it, null)
-                            }
+                    SmallFloatingActionButton({ magic = !magic }) {
+                        AnimatedContent(
+                            if (magic) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
+                            label = ""
+                        ) {
+                            Icon(it, null)
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
                     }
                 }
                 SmallFloatingActionButton({ verbose = !verbose }) {
@@ -210,6 +223,7 @@ fun App() {
                     now = now,
                     label = stringResource(R.string.gps),
                     locationTime = gpsLocationTime,
+                    unique = true,
                     verbose = verbose,
                     tick = magic,
                 )
@@ -229,7 +243,7 @@ fun App() {
                         Spacer(modifier = Modifier.height(16.dp))
                         Button({
                             if (locationPermissionsState.shouldShowRationale) locationPermissionsState.launchMultiplePermissionRequest()
-                            else context.settings()
+                            else context.startAppSettings()
                         }) {
                             Text(
                                 if (locationPermissionsState.permissions.size == locationPermissionsState.revokedPermissions.size) stringResource(
@@ -250,6 +264,7 @@ private fun LocationTime(
     label: String,
     locationTime: LocationTime? = null,
     local: Boolean = false,
+    unique: Boolean = false,
     verbose: Boolean = false,
     tick: Boolean = false,
 ) {
@@ -258,24 +273,39 @@ private fun LocationTime(
     val fixedLength by animateIntAsState(if (verbose) 3 else 1, label = "")
 
     AnimatedVisibility(verbose) {
-        Text(label)
+        Text(label, fontSize = 16.sp)
     }
-    if (local) Text(
-        now.formatLocalTime(fixedLength).annotateMs(),
-        fontSize = 24.sp,
-    ) else if (locationTime != null) {
+    if (local) {
+        AnimatedVisibility(verbose) {
+            Text(
+                now.formatLocalDate(),
+                fontSize = 16.sp,
+            )
+        }
+        Text(
+            now.formatLocalTime(fixedLength).annotateMs(),
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    } else if (locationTime != null) {
         val elapsed = now - locationTime.then
         val timestamp = locationTime.time + elapsed
         val delta = now - timestamp
+        AnimatedVisibility(verbose) {
+            Text(
+                timestamp.formatLocalDate(),
+                fontSize = 16.sp,
+            )
+        }
         Text(
             timestamp.formatLocalTime(fixedLength).annotateMs(),
-            fontSize = 40.sp,
+            fontSize = (if (unique) 40 else 32).sp,
             fontWeight = FontWeight.Bold,
         )
         Text(
             delta.formatSecond(fixedLength),
             color = MaterialTheme.colorScheme.primary,
-            fontSize = 24.sp,
+            fontSize = (if (unique) 24 else 16).sp,
         )
         Text(
             elapsed.formatSecond(fixedLength),
@@ -285,7 +315,7 @@ private fun LocationTime(
             lineHeight = 1.em,
         )
         Text(
-            locationTime.location.string,
+            locationTime.location.format(verbose),
             color = MaterialTheme.colorScheme.tertiary,
             fontSize = 6.sp,
             textAlign = TextAlign.Center,
@@ -350,6 +380,14 @@ private fun String.annotateMs(): AnnotatedString {
     }
 }
 
+private val Instant.localDateTime get() = this.toLocalDateTime(TimeZone.currentSystemDefault())
+private fun Instant.formatLocalDate() = LocalDateTime.Format {
+    year()
+    char('-')
+    monthNumber()
+    char('-')
+    dayOfMonth()
+}.format(this.localDateTime)
 private fun Instant.formatLocalTime(fixedLength: Int = 3) = LocalDateTime.Format {
     hour()
     char(':')
@@ -358,7 +396,7 @@ private fun Instant.formatLocalTime(fixedLength: Int = 3) = LocalDateTime.Format
     second()
     char('.')
     secondFraction(fixedLength)
-}.format(this.toLocalDateTime(TimeZone.currentSystemDefault()))
+}.format(this.localDateTime)
 
 private fun Duration.formatSecond(fixedLength: Int = 3) = "${
     when {
@@ -368,13 +406,54 @@ private fun Duration.formatSecond(fixedLength: Int = 3) = "${
     }
 }${this.inWholeMilliseconds.formatSecond(fixedLength)}"
 
+private fun Double.fixed(fixedLength: Int = 3) = String.format("%.${fixedLength}f", this)
+
 private val Long.instant get() = Instant.fromEpochMilliseconds(this)
 private operator fun Long.plus(duration: Duration) = this.instant + duration
-private fun Long.formatSecond(fixedLength: Int = 3) = String.format("%.${fixedLength}f", this / 1e3)
+private fun Long.formatSecond(fixedLength: Int = 3) = (this / 1E3).fixed(fixedLength)
 
-private val Location.string get() = "$latitude°/$longitude° *${if (hasAccuracy()) "${accuracy}m" else "N/A"}/${if (hasVerticalAccuracy()) "${verticalAccuracyMeters}m" else "N/A"}\n${if (hasAltitude()) "${altitude}m" else "N/A"}\n${if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && hasMslAltitude()) "${mslAltitudeMeters}m" else "N/A"} *${if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && hasMslAltitudeAccuracy()) "${mslAltitudeAccuracyMeters}m" else "N/A"}\n${if (hasBearing()) "$bearing°" else "N/A"} *${if (hasBearingAccuracy()) "$bearingAccuracyDegrees°" else "N/A"}\n${if (hasSpeed()) "${speed}m/s" else "N/A"} *${if (hasSpeedAccuracy()) "${speedAccuracyMetersPerSecond}m/s" else "N/A"}"
+private fun Location.format(verbose: Boolean = false) = buildString {
+    append("${latitude}°/$longitude°")
+    if (verbose) {
+        append(' ')
+        append('(')
+        append(if (hasAccuracy()) "${accuracy}m" else "N/A")
+        append('/')
+        append(if (hasVerticalAccuracy()) "${verticalAccuracyMeters}m" else "N/A")
+        append(')')
+    }
+    append('\n')
+    append(if (hasAltitude()) "${altitude}m" else "N/A")
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        append('\n')
+        append(if (hasMslAltitude()) "${mslAltitudeMeters}m" else "N/A")
+        if (verbose) {
+            append(' ')
+            append('(')
+            append(if (hasMslAltitudeAccuracy()) "${mslAltitudeAccuracyMeters}m" else "N/A")
+            append(')')
+        }
+    }
+    append('\n')
+    append(if (hasBearing()) "${bearing}°" else "N/A")
+    if (verbose) {
+        append(' ')
+        append('(')
+        append(if (hasBearingAccuracy()) "${bearingAccuracyDegrees}°" else "N/A")
+        append(')')
+    }
+    append('\n')
+    append(if (hasSpeed()) "${speed}m/s" else "N/A")
+    if (verbose) {
+        append(' ')
+        append('(')
+        append(if (hasSpeedAccuracy()) "${speedAccuracyMetersPerSecond}m/s" else "N/A")
+        append(')')
+    }
+}
 
-private fun Context.settings() = startActivity(
+private val Context.settings by preferencesDataStore("settings")
+private fun Context.startAppSettings() = startActivity(
     Intent(
         Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)
     )
