@@ -89,6 +89,7 @@ import kotlinx.datetime.toLocalDateTime
 import net.carapax.chronos.ui.theme.ChronosTheme
 import kotlin.math.absoluteValue
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.nanoseconds
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -119,11 +120,18 @@ fun App() {
     var locationTime by remember {
         mutableStateOf<LocationTime?>(null)
     }
+    var passiveLocationTime by remember {
+        mutableStateOf<LocationTime?>(null)
+    }
     if (locationPermissionsState.allPermissionsGranted) DisposableEffect(Unit) {
         debug("DisposableEffect")
-        val gpsListener = LocationListenerCompat {
+        val locationListener = LocationListenerCompat {
             debug("GPS:", it)
             locationTime = LocationTime(it)
+        }
+        val passiveLocationListener = LocationListenerCompat {
+            debug("XXX:", it)
+            passiveLocationTime = LocationTime(it)
         }
         if (ActivityCompat.checkSelfPermission(
                 context, ACCESS_FINE_LOCATION
@@ -135,14 +143,23 @@ fun App() {
                 LocationManager.GPS_PROVIDER,
                 0,
                 0F,
-                gpsListener,
+                locationListener,
+            )
+            locationManager.requestLocationUpdates(
+                LocationManager.PASSIVE_PROVIDER,
+                0,
+                0F,
+                passiveLocationListener,
             )
             locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                ?.let { gpsListener.onLocationChanged(it) }
+                ?.let { locationListener.onLocationChanged(it) }
+            locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+                ?.let { passiveLocationListener.onLocationChanged(it) }
         }
         onDispose {
             debug("DisposableEffect", "onDispose")
-            locationManager.removeUpdates(gpsListener)
+            locationManager.removeUpdates(locationListener)
+            locationManager.removeUpdates(passiveLocationListener)
         }
     } else LaunchedEffect(Unit) {
         debug("LaunchedEffect")
@@ -221,7 +238,7 @@ fun App() {
                     LocationTime(
                         now = now,
                         label = stringResource(R.string.gps),
-                        locationTime = locationTime,
+                        locationTime = passiveLocationTime, // TODO: locationTime
                         verbose = verbose,
                         tick = magic,
                     )
@@ -272,14 +289,15 @@ private fun LocationTime(
                 )
             }
             Text(
-                now.formatLocalTime(fixedLength).annotateMs(),
+                now.formatLocalTime(fixedLength).annotateMilliseconds(),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
             )
         } else if (locationTime != null) {
-            val elapsed = now - locationTime.then
-            val timestamp = locationTime.time + elapsed
+            val timestamp = locationTime.time + (now - locationTime.then)
             val delta = now - timestamp
+            val elapsed =
+                (elapsedRealtimeNanos() - locationTime.location.elapsedRealtimeNanos).nanoseconds
             AnimatedVisibility(verbose) {
                 Text(
                     timestamp.formatLocalDate(),
@@ -287,7 +305,7 @@ private fun LocationTime(
                 )
             }
             Text(
-                timestamp.formatLocalTime(fixedLength).annotateMs(),
+                timestamp.formatLocalTime(fixedLength).annotateMilliseconds(),
                 fontSize = 40.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -353,14 +371,14 @@ private fun rememberNow(): Instant {
 
 private data class LocationTime(
     val location: Location,
-    val time: Long = location.time + (elapsedRealtimeNanos() - location.elapsedRealtimeNanos) / 1_000_000L,
+    val time: Instant = location.time + (elapsedRealtimeNanos() - location.elapsedRealtimeNanos).nanoseconds,
     val then: Instant = now(),
 )
 
 private fun now() = Clock.System.now()
 private fun elapsedRealtimeNanos() = SystemClock.elapsedRealtimeNanos()
 
-private fun String.annotateMs(): AnnotatedString {
+private fun String.annotateMilliseconds(): AnnotatedString {
     val parts = this.split('.')
     if (parts.size < 2) return AnnotatedString(this)
     return buildAnnotatedString {
