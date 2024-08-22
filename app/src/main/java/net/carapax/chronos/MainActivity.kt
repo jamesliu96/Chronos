@@ -471,11 +471,11 @@ private fun Duration.formatSeconds(fixedLength: Int = 3) = "${
     when {
         isPositive() -> '+'
         isNegative() -> '-'
-        else -> '±'
+        else -> ""
     }
 }${this.inWholeMilliseconds.absoluteValue.formatSeconds(fixedLength)}"
 
-private fun Double.fixed(fixedLength: Int = 3) = String.format("%.${fixedLength}f", this)
+private fun Double.fixed(fixedLength: Int = 3) = String.format("%.${fixedLength.coerceAtLeast(0)}f", this)
 
 private val Long.instant get() = Instant.fromEpochMilliseconds(this)
 private operator fun Long.plus(duration: Duration) = this.instant + duration
