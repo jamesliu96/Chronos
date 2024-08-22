@@ -8,4 +8,9 @@
     <string name="x_not_available">%1$s不可用</string>
     <string name="grant_permissions">授予权限</string>
     <string name="allow_fine_location">允许精确位置</string>
+    <plurals name="satellites">
+        <item quantity="zero">无卫星</item>
+        <item quantity="one">%1$d个卫星</item>
+        <item quantity="other">%1$d个卫星</item>
+    </plurals>
 </resources>

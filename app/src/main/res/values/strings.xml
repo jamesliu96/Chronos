@@ -7,4 +7,9 @@
     <string name="x_not_available">%1$s Not Available</string>
     <string name="grant_permissions">Grant Permissions</string>
     <string name="allow_fine_location">Allow Fine Location</string>
+    <plurals name="satellites">
+        <item quantity="zero">No Satellite</item>
+        <item quantity="one">%1$d Satellite</item>
+        <item quantity="other">%1$d Satellites</item>
+    </plurals>
 </resources>
