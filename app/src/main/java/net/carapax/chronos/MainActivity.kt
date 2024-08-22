@@ -103,29 +103,27 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun App() {
+    KeepScreenOn()
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-
     val locationManager = context.getSystemService(LOCATION_SERVICE) as LocationManager
-
-    val now = rememberNow()
     var verbose by rememberSaveable {
         mutableStateOf(false)
     }
     var magic by rememberSaveable {
         mutableStateOf(false)
     }
+    val now = rememberNow()
     val locationPermissionsState =
         rememberMultiplePermissionsState(listOf(ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION))
-    var gpsLocationTime by remember {
+    var locationTime by remember {
         mutableStateOf<LocationTime?>(null)
     }
-
     if (locationPermissionsState.allPermissionsGranted) DisposableEffect(Unit) {
         debug("DisposableEffect")
         val gpsListener = LocationListenerCompat {
-            debug("Location(GPS):", it)
-            gpsLocationTime = LocationTime(it)
+            debug("GPS:", it)
+            locationTime = LocationTime(it)
         }
         if (ActivityCompat.checkSelfPermission(
                 context, ACCESS_FINE_LOCATION
@@ -150,9 +148,6 @@ fun App() {
         debug("LaunchedEffect")
         locationPermissionsState.launchMultiplePermissionRequest()
     }
-
-    KeepScreenOn()
-
     ChronosTheme {
         Scaffold(modifier = Modifier.fillMaxSize(), floatingActionButton = {
             if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) Row {
@@ -226,7 +221,7 @@ fun App() {
                     LocationTime(
                         now = now,
                         label = stringResource(R.string.gps),
-                        locationTime = gpsLocationTime,
+                        locationTime = locationTime,
                         verbose = verbose,
                         tick = magic,
                     )
@@ -261,9 +256,7 @@ private fun LocationTime(
     tick: Boolean = false,
 ) {
     val view = LocalView.current
-
     val fixedLength by animateIntAsState(if (verbose) 3 else 1, label = "")
-
     Column(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -299,12 +292,12 @@ private fun LocationTime(
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                delta.formatSecond(fixedLength),
+                delta.formatSeconds(fixedLength),
                 color = MaterialTheme.colorScheme.primary,
                 fontSize = 16.sp,
             )
             Text(
-                elapsed.formatSecond(fixedLength),
+                elapsed.formatSeconds(fixedLength),
                 color = MaterialTheme.colorScheme.secondary,
                 fontSize = 8.sp,
                 fontStyle = FontStyle.Italic,
@@ -398,19 +391,19 @@ private fun Instant.formatLocalTime(fixedLength: Int = 3) = LocalDateTime.Format
     secondFraction(fixedLength)
 }.format(this.localDateTime)
 
-private fun Duration.formatSecond(fixedLength: Int = 3) = "${
+private fun Duration.formatSeconds(fixedLength: Int = 3) = "${
     when {
-        isPositive() -> "+"
-        isNegative() -> "-"
-        else -> ""
+        isPositive() -> '+'
+        isNegative() -> '-'
+        else -> '±'
     }
-}${this.inWholeMilliseconds.absoluteValue.formatSecond(fixedLength)}"
+}${this.inWholeMilliseconds.absoluteValue.formatSeconds(fixedLength)}"
 
 private fun Double.fixed(fixedLength: Int = 3) = String.format("%.${fixedLength}f", this)
 
 private val Long.instant get() = Instant.fromEpochMilliseconds(this)
 private operator fun Long.plus(duration: Duration) = this.instant + duration
-private fun Long.formatSecond(fixedLength: Int = 3) = (this / 1E3).fixed(fixedLength)
+private fun Long.formatSeconds(fixedLength: Int = 3) = (this / 1E3).fixed(fixedLength)
 
 private val Location.string
     get() = buildString {
