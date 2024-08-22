@@ -75,6 +75,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.location.GnssStatusCompat
 import androidx.core.location.LocationCompat
@@ -147,9 +148,11 @@ fun App() {
                 satelliteCount = status.satelliteCount
             }
         }
-        if (context.hasPermission(ACCESS_FINE_LOCATION) && context.hasPermission(
-                ACCESS_COARSE_LOCATION
-            )
+        if (ActivityCompat.checkSelfPermission(
+                context, ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                context, ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
         ) {
             LocationManagerCompat.registerGnssStatusCallback(
                 locationManager, ContextCompat.getMainExecutor(context), gnssStatusCallback
@@ -537,9 +540,6 @@ private fun Context.startAppSettings() = startActivity(
         Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)
     )
 )
-
-private fun Context.hasPermission(permission: String) =
-    ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
 private const val TAG = "MainActivity"
 private fun debug(vararg msg: Any?) {
