@@ -71,5 +71,4 @@ dependencies {
 
     implementation(libs.accompanist.permissions)
     implementation(libs.kotlinx.datetime)
-    implementation(libs.androidx.datastore.preferences)
 }

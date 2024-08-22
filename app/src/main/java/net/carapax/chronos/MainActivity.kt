@@ -37,7 +37,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
@@ -56,6 +55,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,9 +77,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.location.LocationListenerCompat
 import androidx.core.view.HapticFeedbackConstantsCompat
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.preferencesDataStore
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.coroutines.android.awaitFrame
@@ -90,6 +87,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import net.carapax.chronos.ui.theme.ChronosTheme
+import kotlin.math.absoluteValue
 import kotlin.time.Duration
 
 class MainActivity : ComponentActivity() {
@@ -110,46 +108,24 @@ fun App() {
 
     val locationManager = context.getSystemService(LOCATION_SERVICE) as LocationManager
 
-    var verbose by remember {
-        mutableStateOf(false)
-    }
-    var magic by remember {
-        mutableStateOf(false)
-    }
-
-    val settings = context.settings
-    val magicKey = booleanPreferencesKey("magic")
-    LaunchedEffect(Unit) {
-        settings.data.collect {
-            magic = it[magicKey] ?: false
-        }
-    }
-    LaunchedEffect(magic) {
-        settings.edit {
-            it[magicKey] = magic
-        }
-    }
-
     val now = rememberNow()
-
+    var verbose by rememberSaveable {
+        mutableStateOf(false)
+    }
+    var magic by rememberSaveable {
+        mutableStateOf(false)
+    }
     val locationPermissionsState =
         rememberMultiplePermissionsState(listOf(ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION))
-
     var gpsLocationTime by remember {
         mutableStateOf<LocationTime?>(null)
     }
-    var netLocationTime by remember {
-        mutableStateOf<LocationTime?>(null)
-    }
 
-    if (locationPermissionsState.allPermissionsGranted) DisposableEffect(locationPermissionsState) {
+    if (locationPermissionsState.allPermissionsGranted) DisposableEffect(Unit) {
+        debug("DisposableEffect")
         val gpsListener = LocationListenerCompat {
-            Log.d("MainActivity", "Location(GPS): $it")
+            debug("Location(GPS):", it)
             gpsLocationTime = LocationTime(it)
-        }
-        val netListener = LocationListenerCompat {
-            Log.d("MainActivity", "Location(Net): $it")
-            netLocationTime = LocationTime(it)
         }
         if (ActivityCompat.checkSelfPermission(
                 context, ACCESS_FINE_LOCATION
@@ -163,22 +139,15 @@ fun App() {
                 0F,
                 gpsListener,
             )
-            locationManager.requestLocationUpdates(
-                LocationManager.NETWORK_PROVIDER,
-                0,
-                0F,
-                netListener,
-            )
             locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                 ?.let { gpsListener.onLocationChanged(it) }
-            locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                ?.let { netListener.onLocationChanged(it) }
         }
         onDispose {
+            debug("DisposableEffect", "onDispose")
             locationManager.removeUpdates(gpsListener)
-            locationManager.removeUpdates(netListener)
         }
     } else LaunchedEffect(Unit) {
+        debug("LaunchedEffect")
         locationPermissionsState.launchMultiplePermissionRequest()
     }
 
@@ -243,59 +212,14 @@ fun App() {
                     .padding(innerPadding)
                     .fillMaxSize(),
             ) {
-                if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) Row(
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    LocationTime(
-                        now = now,
-                        label = stringResource(R.string.system),
-                        local = true,
-                        verbose = verbose,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    LocationTime(
-                        now = now,
-                        label = stringResource(R.string.gps),
-                        locationTime = gpsLocationTime,
-                        unique = true,
-                        verbose = verbose,
-                        tick = magic,
-                    )
-                    AnimatedVisibility(verbose) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            LocationTime(
-                                now = now,
-                                label = stringResource(R.string.network),
-                                locationTime = netLocationTime,
-                                verbose = verbose,
-                            )
-                        }
-                    }
-                    AnimatedVisibility(!locationPermissionsState.allPermissionsGranted) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Button({
-                                if (locationPermissionsState.shouldShowRationale) locationPermissionsState.launchMultiplePermissionRequest()
-                                else context.startAppSettings()
-                            }) {
-                                Text(
-                                    if (locationPermissionsState.permissions.size == locationPermissionsState.revokedPermissions.size) stringResource(
-                                        R.string.grant_permissions
-                                    ) else stringResource(R.string.allow_fine_location)
-                                )
-                            }
-                        }
-                    }
-                } else Column(
+                Column(
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     LocationTime(
                         now = now,
                         label = stringResource(R.string.system),
-                        local = true,
+                        system = true,
                         verbose = verbose,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -303,21 +227,9 @@ fun App() {
                         now = now,
                         label = stringResource(R.string.gps),
                         locationTime = gpsLocationTime,
-                        unique = true,
                         verbose = verbose,
                         tick = magic,
                     )
-                    AnimatedVisibility(verbose) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            LocationTime(
-                                now = now,
-                                label = stringResource(R.string.network),
-                                locationTime = netLocationTime,
-                                verbose = verbose,
-                            )
-                        }
-                    }
                     AnimatedVisibility(!locationPermissionsState.allPermissionsGranted) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Spacer(modifier = Modifier.height(16.dp))
@@ -344,8 +256,7 @@ private fun LocationTime(
     now: Instant,
     label: String,
     locationTime: LocationTime? = null,
-    local: Boolean = false,
-    unique: Boolean = false,
+    system: Boolean = false,
     verbose: Boolean = false,
     tick: Boolean = false,
 ) {
@@ -360,7 +271,7 @@ private fun LocationTime(
         AnimatedVisibility(verbose) {
             Text(label, fontSize = 16.sp)
         }
-        if (local) {
+        if (system) {
             AnimatedVisibility(verbose) {
                 Text(
                     now.formatLocalDate(),
@@ -384,13 +295,13 @@ private fun LocationTime(
             }
             Text(
                 timestamp.formatLocalTime(fixedLength).annotateMs(),
-                fontSize = (if (unique) 40 else 32).sp,
+                fontSize = 40.sp,
                 fontWeight = FontWeight.Bold,
             )
             Text(
                 delta.formatSecond(fixedLength),
                 color = MaterialTheme.colorScheme.primary,
-                fontSize = (if (unique) 24 else 16).sp,
+                fontSize = 16.sp,
             )
             Text(
                 elapsed.formatSecond(fixedLength),
@@ -493,7 +404,7 @@ private fun Duration.formatSecond(fixedLength: Int = 3) = "${
         isNegative() -> "-"
         else -> ""
     }
-}${this.inWholeMilliseconds.formatSecond(fixedLength)}"
+}${this.inWholeMilliseconds.absoluteValue.formatSecond(fixedLength)}"
 
 private fun Double.fixed(fixedLength: Int = 3) = String.format("%.${fixedLength}f", this)
 
@@ -534,9 +445,10 @@ private val Location.string
         append(')')
     }
 
-private val Context.settings by preferencesDataStore("settings")
 private fun Context.startAppSettings() = startActivity(
     Intent(
         Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)
     )
 )
+
+private fun debug(vararg msg: Any) = Log.d("MainActivity", msg.joinToString(" "))

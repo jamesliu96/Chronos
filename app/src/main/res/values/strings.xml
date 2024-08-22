@@ -3,7 +3,6 @@
     <string name="title_activity_main">Chronos</string>
     <string name="system">System</string>
     <string name="gps">GPS</string>
-    <string name="network">Network</string>
     <string name="not_available">Not Available</string>
     <string name="x_not_available">%1$s Not Available</string>
     <string name="grant_permissions">Grant Permissions</string>
