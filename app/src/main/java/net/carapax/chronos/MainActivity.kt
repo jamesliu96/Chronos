@@ -128,7 +128,10 @@ fun App() {
     var locationTime by remember {
         mutableStateOf<LocationTime?>(null)
     }
-    var satelliteCount by remember {
+    var satelliteCount by rememberSaveable {
+        mutableIntStateOf(0)
+    }
+    var satelliteUsedInFixCount by rememberSaveable {
         mutableIntStateOf(0)
     }
     if (locationPermissionsState.allPermissionsGranted) DisposableEffect(Unit) {
@@ -144,8 +147,14 @@ fun App() {
                 debug("GnssStatusCallback", "onFirstFix", ttffMillis)
 
             override fun onSatelliteStatusChanged(status: GnssStatusCompat) {
-                debug("GnssStatusCallback", "onSatelliteStatusChanged", status.satelliteCount)
+                debug(
+                    "GnssStatusCallback",
+                    "onSatelliteStatusChanged",
+                    status.satelliteCount,
+                    status.satelliteUsedInFixCount
+                )
                 satelliteCount = status.satelliteCount
+                satelliteUsedInFixCount = status.satelliteUsedInFixCount
             }
         }
         if (ActivityCompat.checkSelfPermission(
@@ -259,6 +268,7 @@ fun App() {
                     label = stringResource(R.string.gps),
                     locationTime = locationTime,
                     satelliteCount = satelliteCount,
+                    satelliteUsedInFixCount = satelliteUsedInFixCount,
                     verbose = verbose,
                     tick = magic,
                     progress = magic,
@@ -286,6 +296,7 @@ private fun LocationTime(
     label: String? = null,
     locationTime: LocationTime? = null,
     satelliteCount: Int = 0,
+    satelliteUsedInFixCount: Int = 0,
     system: Boolean = false,
     verbose: Boolean = false,
     tick: Boolean = false,
@@ -362,7 +373,7 @@ private fun LocationTime(
                         lineHeight = 1.em,
                     )
                     Text(
-                        pluralStringResource(R.plurals.satellites, satelliteCount, satelliteCount),
+                        pluralStringResource(R.plurals.x_of_y_satellites, satelliteUsedInFixCount, satelliteUsedInFixCount, satelliteCount),
                         color = MaterialTheme.colorScheme.secondary,
                         fontSize = 8.sp,
                         lineHeight = 1.em,
@@ -475,7 +486,8 @@ private fun Duration.formatSeconds(fixedLength: Int = 3) = "${
     }
 }${this.inWholeMilliseconds.absoluteValue.formatSeconds(fixedLength)}"
 
-private fun Double.fixed(fixedLength: Int = 3) = String.format("%.${fixedLength.coerceAtLeast(0)}f", this)
+private fun Double.fixed(fixedLength: Int = 3) =
+    String.format("%.${fixedLength.coerceAtLeast(0)}f", this)
 
 private val Long.instant get() = Instant.fromEpochMilliseconds(this)
 private operator fun Long.plus(duration: Duration) = this.instant + duration
@@ -533,6 +545,15 @@ private val Location.string
                 }
             }
         }
+    }
+
+private val GnssStatusCompat.satelliteUsedInFixCount
+    get() = run {
+        var count = 0
+        for (i in 0..<satelliteCount) {
+            if (usedInFix(i)) count++
+        }
+        count
     }
 
 private fun Context.startAppSettings() = startActivity(
