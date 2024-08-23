@@ -64,7 +64,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -93,7 +92,6 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import net.carapax.chronos.ui.theme.ChronosTheme
-import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -333,7 +331,7 @@ private fun LocationTime(
                 )
             }
             Text(
-                now.formatLocalTime(fixedLength).annotateMilliseconds(),
+                now.formatLocalTime(fixedLength).annotatedMilliseconds,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 lineHeight = 1.em,
@@ -353,7 +351,7 @@ private fun LocationTime(
                     )
                 }
                 Text(
-                    time.formatLocalTime(fixedLength).annotateMilliseconds(),
+                    time.formatLocalTime(fixedLength).annotatedMilliseconds,
                     fontSize = 48.sp,
                     fontWeight = FontWeight.Bold,
                     lineHeight = 1.em,
@@ -397,14 +395,9 @@ private fun LocationTime(
                         lineHeight = 1.em,
                     )
                     Text(
-                        "${
-                            pluralStringResource(
-                                R.plurals.x_of_y_satellite_signals,
-                                satelliteUsedInFixCount,
-                                satelliteUsedInFixCount,
-                                satelliteCount
-                            )
-                        }${if (ttff != null) " ${ttff.milliseconds.formatSeconds(fixedLength)}" else ""}",
+                        "$satelliteUsedInFixCount/$satelliteCount${
+                            if (ttff != null) " ${ttff.milliseconds.formatSeconds(fixedLength)}" else ""
+                        }",
                         color = MaterialTheme.colorScheme.secondary,
                         fontSize = 8.sp,
                         lineHeight = 1.em,
@@ -478,20 +471,20 @@ private data class LocationTime(
 private fun now() = Clock.System.now()
 private fun elapsedRealtimeNanos() = SystemClock.elapsedRealtimeNanos()
 
-private fun String.annotateMilliseconds(): AnnotatedString {
-    val parts = this.split('.')
-    if (parts.size < 2) return AnnotatedString(this)
-    return buildAnnotatedString {
-        append(parts[0])
-        append('.')
-        withStyle(style = SpanStyle(color = Color.Red)) {
-            append(parts[1])
+private val String.annotatedMilliseconds
+    get() = run {
+        val parts = split('.', limit = 2)
+        if (parts.size < 2) AnnotatedString(this) else buildAnnotatedString {
+            append(parts[0])
+            append('.')
+            withStyle(style = SpanStyle(color = Color.Red)) {
+                append(parts[1])
+            }
         }
     }
-}
 
 private operator fun Duration.rem(duration: Duration) =
-    (this.inWholeNanoseconds % duration.inWholeNanoseconds).nanoseconds
+    (inWholeNanoseconds % duration.inWholeNanoseconds).nanoseconds
 
 private fun Duration.formatSeconds(fixedLength: Int = 3) = "${
     when {
@@ -499,16 +492,16 @@ private fun Duration.formatSeconds(fixedLength: Int = 3) = "${
         isNegative() -> '-'
         else -> ""
     }
-}${(this.inWholeMilliseconds.absoluteValue / 1E3).fixed(fixedLength)}"
+}${(absoluteValue.inWholeMilliseconds / 1E3).fixed(fixedLength)}"
 
-private val Instant.localDateTime get() = this.toLocalDateTime(TimeZone.currentSystemDefault())
+private val Instant.localDateTime get() = toLocalDateTime(TimeZone.currentSystemDefault())
 private fun Instant.formatLocalDate() = LocalDateTime.Format {
     year()
     char('-')
     monthNumber()
     char('-')
     dayOfMonth()
-}.format(this.localDateTime)
+}.format(localDateTime)
 
 private fun Instant.formatLocalTime(fixedLength: Int = 3) = LocalDateTime.Format {
     hour()
@@ -518,14 +511,13 @@ private fun Instant.formatLocalTime(fixedLength: Int = 3) = LocalDateTime.Format
     second()
     char('.')
     secondFraction(fixedLength)
-}.format(this.localDateTime)
+}.format(localDateTime)
 
 private fun Double.fixed(fixedLength: Int = 3) =
     String.format("%.${fixedLength.coerceAtLeast(0)}f", this)
 
 private operator fun Long.plus(duration: Duration) = Instant.fromEpochMilliseconds(this) + duration
-
-private val Location.age get() = (elapsedRealtimeNanos() - this.elapsedRealtimeNanos).nanoseconds
+private val Location.age get() = (elapsedRealtimeNanos() - elapsedRealtimeNanos).nanoseconds
 private val Location.string
     get() = run {
         val hasVerticalAccuracy = { LocationCompat.hasVerticalAccuracy(this) }
