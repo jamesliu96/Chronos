@@ -343,7 +343,7 @@ private fun LocationTime(
                 lineHeight = 1.em,
             )
         } else if (locationTime != null) {
-            if (locationTime.location.age <= 2.seconds && timeToFirstFix != null) {
+            if (locationTime.location.age <= 2.seconds) {
                 val time = locationTime.time + (now - locationTime.then)
                 if (tick) LaunchedEffect(time.epochSeconds) {
                     debug("LaunchedEffect", "tick")
