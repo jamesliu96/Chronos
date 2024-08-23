@@ -7,9 +7,11 @@
     <string name="x_not_available">%1$s Not Available</string>
     <string name="grant_permissions">Grant Permissions</string>
     <string name="allow_fine_location">Allow Fine Location</string>
-    <plurals name="x_of_y_satellites">
-        <item quantity="zero">%1$d/%2$d Satellite</item>
-        <item quantity="one">%1$d/%2$d Satellite</item>
-        <item quantity="other">%1$d/%2$d Satellites</item>
+    <string name="no_signal">No Signal</string>
+    <string name="x_no_signal">%1$s No Signal</string>
+    <plurals name="x_of_y_satellite_signals">
+        <item quantity="zero">%1$d/%2$d Satellite Signals</item>
+        <item quantity="one">%1$d/%2$d Satellite Signals</item>
+        <item quantity="other">%1$d/%2$d Satellite Signals</item>
     </plurals>
 </resources>

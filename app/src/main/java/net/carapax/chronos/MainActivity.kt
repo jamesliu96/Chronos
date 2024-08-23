@@ -96,6 +96,7 @@ import net.carapax.chronos.ui.theme.ChronosTheme
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -128,6 +129,9 @@ fun App() {
     var locationTime by remember {
         mutableStateOf<LocationTime?>(null)
     }
+    var ttff by rememberSaveable {
+        mutableStateOf<Int?>(null)
+    }
     var satelliteCount by rememberSaveable {
         mutableIntStateOf(0)
     }
@@ -135,7 +139,7 @@ fun App() {
         mutableIntStateOf(0)
     }
     if (locationPermissionsState.allPermissionsGranted) DisposableEffect(Unit) {
-        debug("DisposableEffect")
+        debug("DisposableEffect", "allPermissionsGranted")
         val locationListener = LocationListenerCompat {
             debug("Location(GPS)", it)
             locationTime = LocationTime(it)
@@ -143,15 +147,17 @@ fun App() {
         val gnssStatusCallback = object : GnssStatusCompat.Callback() {
             override fun onStarted() = debug("GnssStatusCallback", "onStarted")
             override fun onStopped() = debug("GnssStatusCallback", "onStopped")
-            override fun onFirstFix(ttffMillis: Int) =
+            override fun onFirstFix(ttffMillis: Int) {
                 debug("GnssStatusCallback", "onFirstFix", ttffMillis)
+                ttff = ttffMillis
+            }
 
             override fun onSatelliteStatusChanged(status: GnssStatusCompat) {
                 debug(
                     "GnssStatusCallback",
                     "onSatelliteStatusChanged",
+                    status.satelliteUsedInFixCount,
                     status.satelliteCount,
-                    status.satelliteUsedInFixCount
                 )
                 satelliteCount = status.satelliteCount
                 satelliteUsedInFixCount = status.satelliteUsedInFixCount
@@ -181,6 +187,7 @@ fun App() {
             locationManager.removeUpdates(locationListener)
         }
     } else LaunchedEffect(Unit) {
+        debug("LaunchedEffect", "launchMultiplePermissionRequest")
         locationPermissionsState.launchMultiplePermissionRequest()
     }
     ChronosTheme {
@@ -267,6 +274,7 @@ fun App() {
                     now = now,
                     label = stringResource(R.string.gps),
                     locationTime = locationTime,
+                    ttff = ttff,
                     satelliteCount = satelliteCount,
                     satelliteUsedInFixCount = satelliteUsedInFixCount,
                     verbose = verbose,
@@ -295,6 +303,7 @@ private fun LocationTime(
     now: Instant,
     label: String? = null,
     locationTime: LocationTime? = null,
+    ttff: Int? = null,
     satelliteCount: Int = 0,
     satelliteUsedInFixCount: Int = 0,
     system: Boolean = false,
@@ -330,50 +339,72 @@ private fun LocationTime(
                 lineHeight = 1.em,
             )
         } else if (locationTime != null) {
-            val time = locationTime.time + (now - locationTime.then)
-            if (tick) LaunchedEffect(time.epochSeconds) {
-                ViewCompat.performHapticFeedback(view, HapticFeedbackConstantsCompat.CLOCK_TICK)
-            }
-            AnimatedVisibility(verbose) {
+            if (locationTime.location.age <= 2.seconds) {
+                val time = locationTime.time + (now - locationTime.then)
+                if (tick) LaunchedEffect(time.epochSeconds) {
+                    debug("LaunchedEffect", "tick")
+                    ViewCompat.performHapticFeedback(view, HapticFeedbackConstantsCompat.CLOCK_TICK)
+                }
+                AnimatedVisibility(verbose) {
+                    Text(
+                        time.formatLocalDate(),
+                        fontSize = 14.sp,
+                        lineHeight = 1.em,
+                    )
+                }
                 Text(
-                    time.formatLocalDate(),
-                    fontSize = 14.sp,
+                    time.formatLocalTime(fixedLength).annotateMilliseconds(),
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 1.em,
+                )
+                AnimatedVisibility(progress) {
+                    LinearProgressIndicator(
+                        { ((time.nanosecondsOfSecond.nanoseconds % 1.seconds) / 1.seconds).toFloat() },
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
+                Text(
+                    (now - time).formatSeconds(fixedLength),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 16.sp,
+                    lineHeight = 1.em,
+                )
+            } else AnimatedContent(
+                if (!verbose && !label.isNullOrBlank()) stringResource(
+                    R.string.x_no_signal, label
+                ) else stringResource(R.string.no_signal),
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = ""
+            ) {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
                     lineHeight = 1.em,
                 )
             }
-            Text(
-                time.formatLocalTime(fixedLength).annotateMilliseconds(),
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 1.em,
-            )
-            AnimatedVisibility(progress) {
-                LinearProgressIndicator(
-                    progress = { time.nanosecondsOfSecond.nanoseconds.inWholeMilliseconds / 1000F },
-                    modifier = Modifier.padding(bottom = 4.dp),
-                )
-            }
-            Text(
-                (now - time).formatSeconds(fixedLength),
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 16.sp,
-                lineHeight = 1.em,
-            )
             AnimatedVisibility(verbose) {
                 Column(
                     modifier = Modifier.padding(top = 2.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        (elapsedRealtimeNanos() - locationTime.location.elapsedRealtimeNanos).nanoseconds.formatSeconds(
-                            fixedLength
-                        ),
+                        locationTime.location.age.formatSeconds(fixedLength),
                         color = MaterialTheme.colorScheme.tertiary,
                         fontSize = 8.sp,
                         lineHeight = 1.em,
                     )
                     Text(
-                        pluralStringResource(R.plurals.x_of_y_satellites, satelliteUsedInFixCount, satelliteUsedInFixCount, satelliteCount),
+                        "${
+                            pluralStringResource(
+                                R.plurals.x_of_y_satellite_signals,
+                                satelliteUsedInFixCount,
+                                satelliteUsedInFixCount,
+                                satelliteCount
+                            )
+                        }${if (ttff != null) " @${ttff.milliseconds.formatSeconds(fixedLength)}" else ""}",
                         color = MaterialTheme.colorScheme.secondary,
                         fontSize = 8.sp,
                         lineHeight = 1.em,
@@ -440,7 +471,7 @@ private fun rememberNow(): Pair<Instant, Duration> {
 
 private data class LocationTime(
     val location: Location,
-    val time: Instant = location.time + (elapsedRealtimeNanos() - location.elapsedRealtimeNanos).nanoseconds,
+    val time: Instant = location.time + location.age,
     val then: Instant = now(),
 )
 
@@ -458,6 +489,17 @@ private fun String.annotateMilliseconds(): AnnotatedString {
         }
     }
 }
+
+private operator fun Duration.rem(duration: Duration) =
+    (this.inWholeNanoseconds % duration.inWholeNanoseconds).nanoseconds
+
+private fun Duration.formatSeconds(fixedLength: Int = 3) = "${
+    when {
+        isPositive() -> '+'
+        isNegative() -> '-'
+        else -> ""
+    }
+}${this.inWholeMilliseconds.absoluteValue.formatSeconds(fixedLength)}"
 
 private val Instant.localDateTime get() = this.toLocalDateTime(TimeZone.currentSystemDefault())
 private fun Instant.formatLocalDate() = LocalDateTime.Format {
@@ -478,23 +520,15 @@ private fun Instant.formatLocalTime(fixedLength: Int = 3) = LocalDateTime.Format
     secondFraction(fixedLength)
 }.format(this.localDateTime)
 
-private fun Duration.formatSeconds(fixedLength: Int = 3) = "${
-    when {
-        isPositive() -> '+'
-        isNegative() -> '-'
-        else -> ""
-    }
-}${this.inWholeMilliseconds.absoluteValue.formatSeconds(fixedLength)}"
-
 private fun Double.fixed(fixedLength: Int = 3) =
     String.format("%.${fixedLength.coerceAtLeast(0)}f", this)
 
-private val Long.instant get() = Instant.fromEpochMilliseconds(this)
-private operator fun Long.plus(duration: Duration) = this.instant + duration
+private operator fun Long.plus(duration: Duration) = Instant.fromEpochMilliseconds(this) + duration
 private fun Long.formatSeconds(fixedLength: Int = 3) = (this / 1E3).fixed(fixedLength)
 
+private val Location.age get() = (elapsedRealtimeNanos() - this.elapsedRealtimeNanos).nanoseconds
 private val Location.string
-    get(): String {
+    get() = run {
         val hasVerticalAccuracy = { LocationCompat.hasVerticalAccuracy(this) }
         val getVerticalAccuracyMeters = { LocationCompat.getVerticalAccuracyMeters(this) }
         val hasMslAltitude = { LocationCompat.hasMslAltitude(this) }
@@ -506,7 +540,7 @@ private val Location.string
         val hasSpeedAccuracy = { LocationCompat.hasSpeedAccuracy(this) }
         val getSpeedAccuracyMetersPerSecond =
             { LocationCompat.getSpeedAccuracyMetersPerSecond(this) }
-        return buildString {
+        buildString {
             append("$latitude° $longitude°")
             if (hasAccuracy()) {
                 append(' ')

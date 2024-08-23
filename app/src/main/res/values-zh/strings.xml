@@ -8,7 +8,9 @@
     <string name="x_not_available">%1$s不可用</string>
     <string name="grant_permissions">授予权限</string>
     <string name="allow_fine_location">允许精确位置</string>
-    <plurals name="x_of_y_satellites">
-        <item quantity="other">%1$d/%2$d 卫星</item>
+    <string name="no_signal">无信号</string>
+    <string name="x_no_signal">%1$s无信号</string>
+    <plurals name="x_of_y_satellite_signals">
+        <item quantity="other">%1$d/%2$d 卫星信号</item>
     </plurals>
 </resources>
