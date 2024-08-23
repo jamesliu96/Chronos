@@ -545,21 +545,21 @@ private val Location.string
             if (hasAccuracy()) {
                 append(' ')
                 append("${accuracy}m")
+            }
+            if (hasAltitude()) {
+                append('\n')
+                append("${altitude}m")
                 if (hasVerticalAccuracy()) {
                     append(' ')
                     append("${getVerticalAccuracyMeters()}m")
                 }
             }
-            if (hasAltitude()) {
+            if (hasMslAltitude()) {
                 append('\n')
-                append("${altitude}m")
-                if (hasMslAltitude()) {
+                append("${getMslAltitudeMeters()}m")
+                if (hasMslAltitudeAccuracy()) {
                     append(' ')
-                    append("${getMslAltitudeMeters()}m")
-                    if (hasMslAltitudeAccuracy()) {
-                        append(' ')
-                        append("${getMslAltitudeAccuracyMeters()}m")
-                    }
+                    append("${getMslAltitudeAccuracyMeters()}m")
                 }
             }
             if (hasBearing()) {
