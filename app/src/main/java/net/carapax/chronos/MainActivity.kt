@@ -127,13 +127,13 @@ fun App() {
     var locationTime by remember {
         mutableStateOf<LocationTime?>(null)
     }
-    var ttff by rememberSaveable {
-        mutableStateOf<Int?>(null)
+    var timeToFirstFix by remember {
+        mutableStateOf<Duration?>(null)
     }
-    var satelliteCount by rememberSaveable {
+    var satelliteCount by remember {
         mutableIntStateOf(0)
     }
-    var satelliteUsedInFixCount by rememberSaveable {
+    var satelliteUsedInFixCount by remember {
         mutableIntStateOf(0)
     }
     if (locationPermissionsState.allPermissionsGranted) DisposableEffect(Unit) {
@@ -142,17 +142,17 @@ fun App() {
             debug("Location(GPS)", it)
             locationTime = LocationTime(it)
         }
-        val gnssStatusCallback = object : GnssStatusCompat.Callback() {
-            override fun onStarted() = debug("GnssStatusCallback", "onStarted")
-            override fun onStopped() = debug("GnssStatusCallback", "onStopped")
+        val gpsStatusCallback = object : GnssStatusCompat.Callback() {
+            override fun onStarted() = debug("GPSStatusCallback", "onStarted")
+            override fun onStopped() = debug("GPSStatusCallback", "onStopped")
             override fun onFirstFix(ttffMillis: Int) {
-                debug("GnssStatusCallback", "onFirstFix", ttffMillis)
-                ttff = ttffMillis
+                debug("GPSStatusCallback", "onFirstFix", ttffMillis)
+                timeToFirstFix = ttffMillis.milliseconds
             }
 
             override fun onSatelliteStatusChanged(status: GnssStatusCompat) {
                 debug(
-                    "GnssStatusCallback",
+                    "GPSStatusCallback",
                     "onSatelliteStatusChanged",
                     status.satelliteUsedInFixCount,
                     status.satelliteCount,
@@ -168,7 +168,9 @@ fun App() {
             ) == PackageManager.PERMISSION_GRANTED
         ) {
             LocationManagerCompat.registerGnssStatusCallback(
-                locationManager, ContextCompat.getMainExecutor(context), gnssStatusCallback
+                locationManager,
+                ContextCompat.getMainExecutor(context),
+                gpsStatusCallback,
             )
             locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
@@ -181,7 +183,7 @@ fun App() {
         }
         onDispose {
             debug("DisposableEffect", "onDispose")
-            LocationManagerCompat.unregisterGnssStatusCallback(locationManager, gnssStatusCallback)
+            LocationManagerCompat.unregisterGnssStatusCallback(locationManager, gpsStatusCallback)
             locationManager.removeUpdates(locationListener)
         }
     } else LaunchedEffect(Unit) {
@@ -242,7 +244,11 @@ fun App() {
                 }
             }
         }) { innerPadding ->
-            AnimatedVisibility(verbose, enter = fadeIn(), exit = fadeOut()) {
+            AnimatedVisibility(
+                verbose,
+                enter = fadeIn(),
+                exit = fadeOut(),
+            ) {
                 Column(modifier = Modifier.padding(innerPadding)) {
                     Text(
                         text = "FPS: ${(1.seconds / duration).roundToInt()}",
@@ -272,7 +278,7 @@ fun App() {
                     now = now,
                     label = stringResource(R.string.gps),
                     locationTime = locationTime,
-                    ttff = ttff,
+                    timeToFirstFix = timeToFirstFix,
                     satelliteCount = satelliteCount,
                     satelliteUsedInFixCount = satelliteUsedInFixCount,
                     verbose = verbose,
@@ -301,7 +307,7 @@ private fun LocationTime(
     now: Instant,
     label: String? = null,
     locationTime: LocationTime? = null,
-    ttff: Int? = null,
+    timeToFirstFix: Duration? = null,
     satelliteCount: Int = 0,
     satelliteUsedInFixCount: Int = 0,
     system: Boolean = false,
@@ -337,7 +343,7 @@ private fun LocationTime(
                 lineHeight = 1.em,
             )
         } else if (locationTime != null) {
-            if (locationTime.location.age <= 2.seconds) {
+            if (locationTime.location.age <= 2.seconds && timeToFirstFix != null) {
                 val time = locationTime.time + (now - locationTime.then)
                 if (tick) LaunchedEffect(time.epochSeconds) {
                     debug("LaunchedEffect", "tick")
@@ -358,7 +364,7 @@ private fun LocationTime(
                 )
                 AnimatedVisibility(progress) {
                     LinearProgressIndicator(
-                        { ((time.nanosecondsOfSecond.nanoseconds % 1.seconds) / 1.seconds).toFloat() },
+                        { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
                         modifier = Modifier.padding(bottom = 4.dp),
                     )
                 }
@@ -396,7 +402,7 @@ private fun LocationTime(
                     )
                     Text(
                         "$satelliteUsedInFixCount/$satelliteCount${
-                            if (ttff != null) " ${ttff.milliseconds.formatSeconds(fixedLength)}" else ""
+                            if (timeToFirstFix != null) " ${timeToFirstFix.formatSeconds(fixedLength)}" else ""
                         }",
                         color = MaterialTheme.colorScheme.secondary,
                         fontSize = 8.sp,
@@ -482,9 +488,6 @@ private val String.annotatedMilliseconds
             }
         }
     }
-
-private operator fun Duration.rem(duration: Duration) =
-    (inWholeNanoseconds % duration.inWholeNanoseconds).nanoseconds
 
 private fun Duration.formatSeconds(fixedLength: Int = 3) = "${
     when {
