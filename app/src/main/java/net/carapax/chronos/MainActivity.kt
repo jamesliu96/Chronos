@@ -404,7 +404,7 @@ private fun LocationTime(
                                 satelliteUsedInFixCount,
                                 satelliteCount
                             )
-                        }${if (ttff != null) " @${ttff.milliseconds.formatSeconds(fixedLength)}" else ""}",
+                        }${if (ttff != null) " ${ttff.milliseconds.formatSeconds(fixedLength)}" else ""}",
                         color = MaterialTheme.colorScheme.secondary,
                         fontSize = 8.sp,
                         lineHeight = 1.em,
@@ -499,7 +499,7 @@ private fun Duration.formatSeconds(fixedLength: Int = 3) = "${
         isNegative() -> '-'
         else -> ""
     }
-}${this.inWholeMilliseconds.absoluteValue.formatSeconds(fixedLength)}"
+}${(this.inWholeMilliseconds.absoluteValue / 1E3).fixed(fixedLength)}"
 
 private val Instant.localDateTime get() = this.toLocalDateTime(TimeZone.currentSystemDefault())
 private fun Instant.formatLocalDate() = LocalDateTime.Format {
@@ -524,7 +524,6 @@ private fun Double.fixed(fixedLength: Int = 3) =
     String.format("%.${fixedLength.coerceAtLeast(0)}f", this)
 
 private operator fun Long.plus(duration: Duration) = Instant.fromEpochMilliseconds(this) + duration
-private fun Long.formatSeconds(fixedLength: Int = 3) = (this / 1E3).fixed(fixedLength)
 
 private val Location.age get() = (elapsedRealtimeNanos() - this.elapsedRealtimeNanos).nanoseconds
 private val Location.string
