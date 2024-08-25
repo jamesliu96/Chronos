@@ -52,7 +52,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -130,11 +129,8 @@ fun App() {
     var timeToFirstFix by remember {
         mutableStateOf<Duration?>(null)
     }
-    var satelliteCount by remember {
-        mutableIntStateOf(0)
-    }
-    var satelliteUsedInFixCount by remember {
-        mutableIntStateOf(0)
+    var satelliteStatus by remember {
+        mutableStateOf<GnssStatusCompat?>(null)
     }
     if (locationPermissionsState.allPermissionsGranted) DisposableEffect(Unit) {
         debug("DisposableEffect", "allPermissionsGranted")
@@ -157,8 +153,7 @@ fun App() {
                     status.satelliteUsedInFixCount,
                     status.satelliteCount,
                 )
-                satelliteCount = status.satelliteCount
-                satelliteUsedInFixCount = status.satelliteUsedInFixCount
+                satelliteStatus = status
             }
         }
         if (ActivityCompat.checkSelfPermission(
@@ -202,7 +197,7 @@ fun App() {
                         AnimatedContent(
                             if (magic) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
-                            label = ""
+                            label = "",
                         ) {
                             Icon(it, null)
                         }
@@ -212,7 +207,7 @@ fun App() {
                     AnimatedContent(
                         if (verbose) Icons.Default.Close else Icons.Default.Settings,
                         transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
-                        label = ""
+                        label = "",
                     ) {
                         Icon(it, null)
                     }
@@ -227,7 +222,7 @@ fun App() {
                         AnimatedContent(
                             if (magic) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                             transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
-                            label = ""
+                            label = "",
                         ) {
                             Icon(it, null)
                         }
@@ -237,7 +232,7 @@ fun App() {
                     AnimatedContent(
                         if (verbose) Icons.Default.Close else Icons.Default.Settings,
                         transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
-                        label = ""
+                        label = "",
                     ) {
                         Icon(it, null)
                     }
@@ -279,8 +274,7 @@ fun App() {
                     label = stringResource(R.string.gps),
                     locationTime = locationTime,
                     timeToFirstFix = timeToFirstFix,
-                    satelliteCount = satelliteCount,
-                    satelliteUsedInFixCount = satelliteUsedInFixCount,
+                    satelliteStatus = satelliteStatus,
                     verbose = verbose,
                     tick = magic,
                     progress = magic,
@@ -308,8 +302,7 @@ private fun LocationTime(
     label: String? = null,
     locationTime: LocationTime? = null,
     timeToFirstFix: Duration? = null,
-    satelliteCount: Int = 0,
-    satelliteUsedInFixCount: Int = 0,
+    satelliteStatus: GnssStatusCompat? = null,
     system: Boolean = false,
     verbose: Boolean = false,
     tick: Boolean = false,
@@ -324,7 +317,7 @@ private fun LocationTime(
         if (!label.isNullOrBlank()) AnimatedVisibility(verbose) {
             Text(
                 label,
-                fontSize = 14.sp,
+                fontSize = 12.sp,
                 lineHeight = 1.em,
             )
         }
@@ -332,7 +325,7 @@ private fun LocationTime(
             AnimatedVisibility(verbose) {
                 Text(
                     now.formatLocalDate(),
-                    fontSize = 14.sp,
+                    fontSize = 12.sp,
                     lineHeight = 1.em,
                 )
             }
@@ -343,51 +336,57 @@ private fun LocationTime(
                 lineHeight = 1.em,
             )
         } else if (locationTime != null) {
-            if (locationTime.location.age <= 2.seconds) {
+            val age = locationTime.location.age
+            AnimatedVisibility(age <= 2.seconds) {
                 val time = locationTime.time + (now - locationTime.then)
                 if (tick) LaunchedEffect(time.epochSeconds) {
                     debug("LaunchedEffect", "tick")
                     ViewCompat.performHapticFeedback(view, HapticFeedbackConstantsCompat.CLOCK_TICK)
                 }
-                AnimatedVisibility(verbose) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    AnimatedVisibility(verbose) {
+                        Text(
+                            time.formatLocalDate(),
+                            fontSize = 12.sp,
+                            lineHeight = 1.em,
+                        )
+                    }
                     Text(
-                        time.formatLocalDate(),
-                        fontSize = 14.sp,
+                        time.formatLocalTime(fixedLength).annotatedMilliseconds,
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 1.em,
+                    )
+                    AnimatedVisibility(progress) {
+                        LinearProgressIndicator(
+                            { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
+                            modifier = Modifier.padding(bottom = 6.dp),
+                        )
+                    }
+                    Text(
+                        (now - time).formatSeconds(fixedLength),
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 16.sp,
                         lineHeight = 1.em,
                     )
                 }
-                Text(
-                    time.formatLocalTime(fixedLength).annotatedMilliseconds,
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = 1.em,
-                )
-                AnimatedVisibility(progress) {
-                    LinearProgressIndicator(
-                        { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
-                        modifier = Modifier.padding(bottom = 4.dp),
+            }
+            AnimatedVisibility(age > 2.seconds) {
+                AnimatedContent(
+                    if (!verbose && !label.isNullOrBlank()) stringResource(
+                        R.string.x_no_signal, label
+                    ) else stringResource(R.string.no_signal),
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "",
+                ) {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 1.em,
                     )
                 }
-                Text(
-                    (now - time).formatSeconds(fixedLength),
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 16.sp,
-                    lineHeight = 1.em,
-                )
-            } else AnimatedContent(
-                if (!verbose && !label.isNullOrBlank()) stringResource(
-                    R.string.x_no_signal, label
-                ) else stringResource(R.string.no_signal),
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = ""
-            ) {
-                Text(
-                    it,
-                    color = MaterialTheme.colorScheme.error,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = 1.em,
-                )
             }
             AnimatedVisibility(verbose) {
                 Column(
@@ -395,14 +394,16 @@ private fun LocationTime(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        locationTime.location.age.formatSeconds(fixedLength),
+                        age.formatSeconds(fixedLength),
                         color = MaterialTheme.colorScheme.tertiary,
                         fontSize = 8.sp,
                         lineHeight = 1.em,
                     )
                     Text(
-                        "$satelliteUsedInFixCount/$satelliteCount${
-                            if (timeToFirstFix != null) " ${timeToFirstFix.formatSeconds(fixedLength)}" else ""
+                        "${satelliteStatus?.satelliteUsedInFixCount ?: 0}/${satelliteStatus?.satelliteCount ?: 0}${
+                            if (timeToFirstFix != null) " ${
+                                timeToFirstFix.formatSeconds(fixedLength)
+                            }" else ""
                         }",
                         color = MaterialTheme.colorScheme.secondary,
                         fontSize = 8.sp,
@@ -422,7 +423,7 @@ private fun LocationTime(
                 R.string.x_not_available, label
             ) else stringResource(R.string.not_available),
             transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = ""
+            label = "",
         ) {
             Text(
                 it,
