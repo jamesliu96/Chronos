@@ -579,9 +579,7 @@ private val Location.string
 private val GnssStatusCompat.satelliteUsedInFixCount
     get() = run {
         var count = 0
-        for (i in 0..<satelliteCount) {
-            if (usedInFix(i)) count++
-        }
+        for (i in 0..<satelliteCount) if (usedInFix(i)) count++
         count
     }
 
