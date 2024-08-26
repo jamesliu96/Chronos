@@ -335,103 +335,112 @@ private fun LocationTime(
                 fontWeight = FontWeight.Bold,
                 lineHeight = 1.em,
             )
-        } else if (locationTime != null) {
-            val age = locationTime.location.age
-            AnimatedVisibility(age <= 2.seconds) {
-                val time = locationTime.time + (now - locationTime.then)
-                if (tick) LaunchedEffect(time.epochSeconds) {
-                    debug("LaunchedEffect", "tick")
-                    ViewCompat.performHapticFeedback(view, HapticFeedbackConstantsCompat.CLOCK_TICK)
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    AnimatedVisibility(verbose) {
+        } else {
+            AnimatedVisibility(locationTime != null) {
+                if (locationTime == null) return@AnimatedVisibility
+                val age = locationTime.location.age
+                AnimatedVisibility(age <= 2.seconds) {
+                    val time = locationTime.time + (now - locationTime.then)
+                    if (tick) LaunchedEffect(time.epochSeconds) {
+                        debug("LaunchedEffect", "tick")
+                        ViewCompat.performHapticFeedback(
+                            view,
+                            HapticFeedbackConstantsCompat.CLOCK_TICK,
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        AnimatedVisibility(verbose) {
+                            Text(
+                                time.formatLocalDate(),
+                                fontSize = 12.sp,
+                                lineHeight = 1.em,
+                            )
+                        }
                         Text(
-                            time.formatLocalDate(),
-                            fontSize = 12.sp,
+                            time.formatLocalTime(fixedLength).annotatedMilliseconds,
+                            fontSize = 48.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 1.em,
+                        )
+                        AnimatedVisibility(progress) {
+                            LinearProgressIndicator(
+                                { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
+                        }
+                        Text(
+                            (now - time).formatSeconds(fixedLength),
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 16.sp,
                             lineHeight = 1.em,
                         )
                     }
-                    Text(
-                        time.formatLocalTime(fixedLength).annotatedMilliseconds,
-                        fontSize = 48.sp,
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 1.em,
-                    )
-                    AnimatedVisibility(progress) {
-                        LinearProgressIndicator(
-                            { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
-                            modifier = Modifier.padding(bottom = 6.dp),
+                }
+                AnimatedVisibility(age > 2.seconds) {
+                    AnimatedContent(
+                        if (!verbose && !label.isNullOrBlank()) stringResource(
+                            R.string.x_no_signal, label
+                        ) else stringResource(R.string.no_signal),
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "",
+                    ) {
+                        Text(
+                            it,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 1.em,
                         )
                     }
-                    Text(
-                        (now - time).formatSeconds(fixedLength),
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 16.sp,
-                        lineHeight = 1.em,
-                    )
+                }
+                AnimatedVisibility(verbose) {
+                    Column(
+                        modifier = Modifier.padding(top = 2.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            age.formatSeconds(fixedLength),
+                            color = MaterialTheme.colorScheme.tertiary,
+                            fontSize = 8.sp,
+                            lineHeight = 1.em,
+                        )
+                        Text(
+                            "${satelliteStatus?.satelliteUsedInFixCount ?: 0}/${satelliteStatus?.satelliteCount ?: 0}${
+                                if (timeToFirstFix != null) " ${
+                                    timeToFirstFix.formatSeconds(fixedLength)
+                                }" else ""
+                            }",
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontSize = 8.sp,
+                            lineHeight = 1.em,
+                        )
+                        Text(
+                            locationTime.location.string,
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontSize = 8.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 1.em,
+                        )
+                    }
                 }
             }
-            AnimatedVisibility(age > 2.seconds) {
-                AnimatedContent(
-                    if (!verbose && !label.isNullOrBlank()) stringResource(
-                        R.string.x_no_signal, label
-                    ) else stringResource(R.string.no_signal),
-                    transitionSpec = { fadeIn() togetherWith fadeOut() },
-                    label = "",
-                ) {
-                    Text(
-                        it,
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 1.em,
-                    )
-                }
+        }
+        AnimatedVisibility(locationTime == null) {
+            AnimatedContent(
+                if (!verbose && !label.isNullOrBlank()) stringResource(
+                    R.string.x_not_available, label
+                ) else stringResource(R.string.not_available),
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "",
+            ) {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 1.em,
+                )
             }
-            AnimatedVisibility(verbose) {
-                Column(
-                    modifier = Modifier.padding(top = 2.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        age.formatSeconds(fixedLength),
-                        color = MaterialTheme.colorScheme.tertiary,
-                        fontSize = 8.sp,
-                        lineHeight = 1.em,
-                    )
-                    Text(
-                        "${satelliteStatus?.satelliteUsedInFixCount ?: 0}/${satelliteStatus?.satelliteCount ?: 0}${
-                            if (timeToFirstFix != null) " ${
-                                timeToFirstFix.formatSeconds(fixedLength)
-                            }" else ""
-                        }",
-                        color = MaterialTheme.colorScheme.secondary,
-                        fontSize = 8.sp,
-                        lineHeight = 1.em,
-                    )
-                    Text(
-                        locationTime.location.string,
-                        color = MaterialTheme.colorScheme.secondary,
-                        fontSize = 8.sp,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 1.em,
-                    )
-                }
-            }
-        } else AnimatedContent(
-            if (!verbose && !label.isNullOrBlank()) stringResource(
-                R.string.x_not_available, label
-            ) else stringResource(R.string.not_available),
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "",
-        ) {
-            Text(
-                it,
-                color = MaterialTheme.colorScheme.error,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 1.em,
-            )
         }
     }
 }
