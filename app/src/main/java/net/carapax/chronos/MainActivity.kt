@@ -5,14 +5,15 @@ import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.content.Context
 import android.content.Context.LOCATION_SERVICE
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.content.res.Configuration
+import android.content.pm.PackageManager.PERMISSION_GRANTED
+import android.content.res.Configuration.ORIENTATION_LANDSCAPE
 import android.location.Location
 import android.location.LocationManager
-import android.net.Uri
+import android.location.LocationManager.GPS_PROVIDER
+import android.net.Uri.fromParts
 import android.os.Bundle
-import android.os.SystemClock
-import android.provider.Settings
+import android.os.SystemClock.elapsedRealtimeNanos
+import android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -44,7 +45,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
@@ -59,7 +60,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color.Companion.Red
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -67,24 +68,25 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontWeight.Companion.Bold
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import androidx.core.content.ContextCompat.checkSelfPermission
+import androidx.core.content.ContextCompat.getMainExecutor
 import androidx.core.location.GnssStatusCompat
 import androidx.core.location.LocationCompat
 import androidx.core.location.LocationListenerCompat
-import androidx.core.location.LocationManagerCompat
-import androidx.core.view.HapticFeedbackConstantsCompat
+import androidx.core.location.LocationManagerCompat.registerGnssStatusCallback
+import androidx.core.location.LocationManagerCompat.unregisterGnssStatusCallback
+import androidx.core.view.HapticFeedbackConstantsCompat.CLOCK_TICK
 import androidx.core.view.ViewCompat
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.coroutines.android.awaitFrame
-import kotlinx.datetime.Clock
+import kotlinx.datetime.Clock.System.now
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -156,29 +158,31 @@ fun App() {
                 satelliteStatus = status
             }
         }
-        if (ActivityCompat.checkSelfPermission(
-                context, ACCESS_COARSE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
-                context, ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
+        if (checkSelfPermission(
+                context,
+                ACCESS_COARSE_LOCATION,
+            ) == PERMISSION_GRANTED && checkSelfPermission(
+                context,
+                ACCESS_FINE_LOCATION,
+            ) == PERMISSION_GRANTED
         ) {
-            LocationManagerCompat.registerGnssStatusCallback(
+            registerGnssStatusCallback(
                 locationManager,
-                ContextCompat.getMainExecutor(context),
+                getMainExecutor(context),
                 gpsStatusCallback,
             )
             locationManager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
+                GPS_PROVIDER,
                 0,
-                0F,
+                0f,
                 locationListener,
             )
-            locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            locationManager.getLastKnownLocation(GPS_PROVIDER)
                 ?.let { locationListener.onLocationChanged(it) }
         }
         onDispose {
             debug("DisposableEffect", "onDispose")
-            LocationManagerCompat.unregisterGnssStatusCallback(locationManager, gpsStatusCallback)
+            unregisterGnssStatusCallback(locationManager, gpsStatusCallback)
             locationManager.removeUpdates(locationListener)
         }
     } else LaunchedEffect(Unit) {
@@ -187,7 +191,7 @@ fun App() {
     }
     ChronosTheme {
         Scaffold(modifier = Modifier.fillMaxSize(), floatingActionButton = {
-            if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) Row {
+            if (configuration.orientation == ORIENTATION_LANDSCAPE) Row {
                 AnimatedVisibility(
                     verbose,
                     enter = slideInHorizontally { it } + fadeIn(),
@@ -247,7 +251,7 @@ fun App() {
                 Column(modifier = Modifier.padding(innerPadding)) {
                     Text(
                         text = "FPS: ${(1.seconds / duration).roundToInt()}",
-                        color = MaterialTheme.colorScheme.secondary,
+                        color = colorScheme.secondary,
                         fontSize = 8.sp,
                         lineHeight = 1.em,
                     )
@@ -281,7 +285,10 @@ fun App() {
                 )
                 AnimatedVisibility(!locationPermissionsState.allPermissionsGranted) {
                     Button(
-                        { if (locationPermissionsState.shouldShowRationale) locationPermissionsState.launchMultiplePermissionRequest() else context.startAppSettings() },
+                        {
+                            if (locationPermissionsState.shouldShowRationale) locationPermissionsState.launchMultiplePermissionRequest()
+                            else context.startAppSettings()
+                        },
                         modifier = Modifier.padding(top = 8.dp),
                     ) {
                         Text(
@@ -310,138 +317,130 @@ private fun LocationTime(
 ) {
     val view = LocalView.current
     val fixedLength by animateIntAsState(if (verbose) 3 else 1, label = "")
-    Column(
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        if (!label.isNullOrBlank()) AnimatedVisibility(verbose) {
+    if (!label.isNullOrBlank()) AnimatedVisibility(verbose) {
+        Text(
+            label,
+            fontSize = 12.sp,
+            lineHeight = 1.em,
+        )
+    }
+    if (system) {
+        AnimatedVisibility(verbose) {
             Text(
-                label,
+                now.formatLocalDate(),
                 fontSize = 12.sp,
                 lineHeight = 1.em,
             )
         }
-        if (system) {
-            AnimatedVisibility(verbose) {
+        Text(
+            now.formatLocalTime(fixedLength).annotatedMilliseconds,
+            fontSize = 20.sp,
+            fontWeight = Bold,
+            lineHeight = 1.em,
+        )
+    } else {
+        AnimatedVisibility(locationTime != null) {
+            if (locationTime == null) return@AnimatedVisibility
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val age = locationTime.location.age
+                AnimatedVisibility(age <= 2.seconds) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        val time = locationTime.time + (now - locationTime.then)
+                        if (tick) LaunchedEffect(time.epochSeconds) {
+                            debug("LaunchedEffect", "tick")
+                            ViewCompat.performHapticFeedback(view, CLOCK_TICK)
+                        }
+                        AnimatedVisibility(verbose) {
+                            Text(
+                                time.formatLocalDate(),
+                                fontSize = 12.sp,
+                                lineHeight = 1.em,
+                            )
+                        }
+                        Text(
+                            time.formatLocalTime(fixedLength).annotatedMilliseconds,
+                            fontSize = 48.sp,
+                            fontWeight = Bold,
+                            lineHeight = 1.em,
+                        )
+                        AnimatedVisibility(progress) {
+                            LinearProgressIndicator(
+                                { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
+                        }
+                        Text(
+                            (now - time).formatSeconds(fixedLength),
+                            color = colorScheme.primary,
+                            fontSize = 16.sp,
+                            lineHeight = 1.em,
+                        )
+                    }
+                }
+                AnimatedVisibility(age > 2.seconds) {
+                    AnimatedContent(
+                        if (!verbose && !label.isNullOrBlank()) stringResource(
+                            R.string.x_no_signal, label
+                        ) else stringResource(R.string.no_signal),
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "",
+                    ) {
+                        Text(
+                            it,
+                            color = colorScheme.error,
+                            fontSize = 24.sp,
+                            fontWeight = Bold,
+                            lineHeight = 1.em,
+                        )
+                    }
+                }
+                AnimatedVisibility(verbose) {
+                    Column(
+                        modifier = Modifier.padding(top = 2.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            age.formatSeconds(fixedLength),
+                            color = colorScheme.tertiary,
+                            fontSize = 8.sp,
+                            lineHeight = 1.em,
+                        )
+                        Text(
+                            "${satelliteStatus?.satelliteUsedInFixCount ?: 0}/${satelliteStatus?.satelliteCount ?: 0}${
+                                if (timeToFirstFix != null) " ${
+                                    timeToFirstFix.formatSeconds(fixedLength)
+                                }" else ""
+                            }",
+                            color = colorScheme.secondary,
+                            fontSize = 8.sp,
+                            lineHeight = 1.em,
+                        )
+                        Text(
+                            locationTime.location.string,
+                            color = colorScheme.secondary,
+                            fontSize = 8.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 1.em,
+                        )
+                    }
+                }
+            }
+        }
+        AnimatedVisibility(locationTime == null) {
+            AnimatedContent(
+                if (!verbose && !label.isNullOrBlank()) stringResource(
+                    R.string.x_not_available, label
+                ) else stringResource(R.string.not_available),
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "",
+            ) {
                 Text(
-                    now.formatLocalDate(),
-                    fontSize = 12.sp,
+                    it,
+                    color = colorScheme.error,
+                    fontSize = 24.sp,
+                    fontWeight = Bold,
                     lineHeight = 1.em,
                 )
-            }
-            Text(
-                now.formatLocalTime(fixedLength).annotatedMilliseconds,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 1.em,
-            )
-        } else {
-            AnimatedVisibility(locationTime != null) {
-                if (locationTime == null) return@AnimatedVisibility
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    val age = locationTime.location.age
-                    AnimatedVisibility(age <= 2.seconds) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            val time = locationTime.time + (now - locationTime.then)
-                            if (tick) LaunchedEffect(time.epochSeconds) {
-                                debug("LaunchedEffect", "tick")
-                                ViewCompat.performHapticFeedback(
-                                    view,
-                                    HapticFeedbackConstantsCompat.CLOCK_TICK,
-                                )
-                            }
-                            AnimatedVisibility(verbose) {
-                                Text(
-                                    time.formatLocalDate(),
-                                    fontSize = 12.sp,
-                                    lineHeight = 1.em,
-                                )
-                            }
-                            Text(
-                                time.formatLocalTime(fixedLength).annotatedMilliseconds,
-                                fontSize = 48.sp,
-                                fontWeight = FontWeight.Bold,
-                                lineHeight = 1.em,
-                            )
-                            AnimatedVisibility(progress) {
-                                LinearProgressIndicator(
-                                    { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
-                                    modifier = Modifier.padding(bottom = 6.dp),
-                                )
-                            }
-                            Text(
-                                (now - time).formatSeconds(fixedLength),
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 16.sp,
-                                lineHeight = 1.em,
-                            )
-                        }
-                    }
-                    AnimatedVisibility(age > 2.seconds) {
-                        AnimatedContent(
-                            if (!verbose && !label.isNullOrBlank()) stringResource(
-                                R.string.x_no_signal, label
-                            ) else stringResource(R.string.no_signal),
-                            transitionSpec = { fadeIn() togetherWith fadeOut() },
-                            label = "",
-                        ) {
-                            Text(
-                                it,
-                                color = MaterialTheme.colorScheme.error,
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
-                                lineHeight = 1.em,
-                            )
-                        }
-                    }
-                    AnimatedVisibility(verbose) {
-                        Column(
-                            modifier = Modifier.padding(top = 2.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                age.formatSeconds(fixedLength),
-                                color = MaterialTheme.colorScheme.tertiary,
-                                fontSize = 8.sp,
-                                lineHeight = 1.em,
-                            )
-                            Text(
-                                "${satelliteStatus?.satelliteUsedInFixCount ?: 0}/${satelliteStatus?.satelliteCount ?: 0}${
-                                    if (timeToFirstFix != null) " ${
-                                        timeToFirstFix.formatSeconds(fixedLength)
-                                    }" else ""
-                                }",
-                                color = MaterialTheme.colorScheme.secondary,
-                                fontSize = 8.sp,
-                                lineHeight = 1.em,
-                            )
-                            Text(
-                                locationTime.location.string,
-                                color = MaterialTheme.colorScheme.secondary,
-                                fontSize = 8.sp,
-                                textAlign = TextAlign.Center,
-                                lineHeight = 1.em,
-                            )
-                        }
-                    }
-                }
-            }
-            AnimatedVisibility(locationTime == null) {
-                AnimatedContent(
-                    if (!verbose && !label.isNullOrBlank()) stringResource(
-                        R.string.x_not_available, label
-                    ) else stringResource(R.string.not_available),
-                    transitionSpec = { fadeIn() togetherWith fadeOut() },
-                    label = "",
-                ) {
-                    Text(
-                        it,
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 1.em,
-                    )
-                }
             }
         }
     }
@@ -486,16 +485,13 @@ private data class LocationTime(
     val then: Instant = now(),
 )
 
-private fun now() = Clock.System.now()
-private fun elapsedRealtimeNanos() = SystemClock.elapsedRealtimeNanos()
-
 private val String.annotatedMilliseconds
     get() = run {
         val parts = split('.', limit = 2)
         if (parts.size < 2) AnnotatedString(this) else buildAnnotatedString {
             append(parts[0])
             append('.')
-            withStyle(style = SpanStyle(color = Color.Red)) {
+            withStyle(style = SpanStyle(color = Red)) {
                 append(parts[1])
             }
         }
@@ -596,7 +592,8 @@ private val GnssStatusCompat.satelliteUsedInFixCount
 
 private fun Context.startAppSettings() = startActivity(
     Intent(
-        Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)
+        ACTION_APPLICATION_DETAILS_SETTINGS,
+        fromParts("package", packageName, null),
     )
 )
 
