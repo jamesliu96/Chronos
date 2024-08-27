@@ -458,7 +458,7 @@ private fun KeepScreenOn() {
 }
 
 @Composable
-private fun rememberNow(): Pair<Instant, Duration> {
+private fun rememberNow() = run {
     var now by remember {
         mutableStateOf(now())
     }
@@ -476,7 +476,7 @@ private fun rememberNow(): Pair<Instant, Duration> {
             now = now()
         }
     }
-    return Pair(now, duration.nanoseconds)
+    now to duration.nanoseconds
 }
 
 private data class LocationTime(
