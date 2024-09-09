@@ -85,6 +85,8 @@ import androidx.core.view.HapticFeedbackConstantsCompat.CLOCK_TICK
 import androidx.core.view.ViewCompat
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.lyft.kronos.AndroidClockFactory
+import com.lyft.kronos.KronosClock
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.datetime.Clock.System.now
 import kotlinx.datetime.Instant
@@ -189,6 +191,13 @@ fun App() {
         debug("LaunchedEffect", "launchMultiplePermissionRequest")
         locationPermissionsState.launchMultiplePermissionRequest()
     }
+    val kronosClock = remember {
+        AndroidClockFactory.createKronosClock(context.applicationContext)
+    }
+    LaunchedEffect(Unit) {
+        debug("LaunchedEffect", "syncInBackground")
+        kronosClock.syncInBackground()
+    }
     ChronosTheme {
         Scaffold(modifier = Modifier.fillMaxSize(), floatingActionButton = {
             if (configuration.orientation == ORIENTATION_LANDSCAPE) Row {
@@ -283,6 +292,19 @@ fun App() {
                     tick = magic,
                     progress = magic,
                 )
+                AnimatedVisibility(verbose) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                val locationTimeUnavailable =
+                    locationTime?.location?.age?.let { it > 2.seconds } ?: false
+                LocationTime(
+                    now = now,
+                    label = stringResource(R.string.network),
+                    kronosClock = kronosClock,
+                    verbose = verbose,
+                    tick = magic && locationTimeUnavailable,
+                    progress = magic && locationTimeUnavailable,
+                )
                 AnimatedVisibility(!locationPermissionsState.allPermissionsGranted) {
                     Button(
                         {
@@ -310,6 +332,7 @@ private fun LocationTime(
     locationTime: LocationTime? = null,
     timeToFirstFix: Duration? = null,
     satelliteStatus: GnssStatusCompat? = null,
+    kronosClock: KronosClock? = null,
     system: Boolean = false,
     verbose: Boolean = false,
     tick: Boolean = false,
@@ -364,13 +387,12 @@ private fun LocationTime(
                             lineHeight = 1.em,
                         )
                         AnimatedVisibility(progress) {
-                            LinearProgressIndicator(
-                                { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
+                            LinearProgressIndicator({ (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
                                 modifier = Modifier.padding(bottom = 6.dp),
-                            )
+                                drawStopIndicator = {})
                         }
                         Text(
-                            (now - time).formatSeconds(fixedLength),
+                            (time - now).formatSeconds(fixedLength),
                             color = colorScheme.primary,
                             fontSize = 16.sp,
                             lineHeight = 1.em,
@@ -426,7 +448,52 @@ private fun LocationTime(
                 }
             }
         }
-        AnimatedVisibility(locationTime == null) {
+        val kronosClockTime = kronosClock?.getCurrentNtpTimeMs()
+        AnimatedVisibility(kronosClockTime != null) {
+            if (kronosClockTime == null) return@AnimatedVisibility
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val time = kronosClockTime.instant
+                if (tick) LaunchedEffect(time.epochSeconds) {
+                    debug("LaunchedEffect", "tick")
+                    ViewCompat.performHapticFeedback(view, CLOCK_TICK)
+                }
+                AnimatedVisibility(verbose) {
+                    Text(
+                        time.formatLocalDate(),
+                        fontSize = 12.sp,
+                        lineHeight = 1.em,
+                    )
+                }
+                Text(
+                    time.formatLocalTime(fixedLength).annotatedMilliseconds,
+                    fontSize = 20.sp,
+                    fontWeight = Bold,
+                    lineHeight = 1.em,
+                )
+                AnimatedVisibility(progress) {
+                    LinearProgressIndicator({ (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
+                        modifier = Modifier.padding(bottom = 2.dp),
+                        drawStopIndicator = {})
+                }
+                Text(
+                    (time - now).formatSeconds(fixedLength),
+                    color = colorScheme.primary,
+                    fontSize = 16.sp,
+                    lineHeight = 1.em,
+                )
+                AnimatedVisibility(verbose) {
+                    Text(
+                        (kronosClock.getCurrentTime().timeSinceLastNtpSyncMs
+                            ?: 0).milliseconds.formatSeconds(fixedLength),
+                        color = colorScheme.tertiary,
+                        fontSize = 8.sp,
+                        lineHeight = 1.em,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+        }
+        AnimatedVisibility(locationTime == null && kronosClockTime == null) {
             AnimatedContent(
                 if (!verbose && !label.isNullOrBlank()) stringResource(
                     R.string.x_not_available, label
@@ -527,7 +594,8 @@ private fun Instant.formatLocalTime(fixedLength: Int = 3) = LocalDateTime.Format
 private fun Double.fixed(fixedLength: Int = 3) =
     String.format("%.${fixedLength.coerceAtLeast(0)}f", this)
 
-private operator fun Long.plus(duration: Duration) = Instant.fromEpochMilliseconds(this) + duration
+private val Long.instant get() = Instant.fromEpochMilliseconds(this)
+private operator fun Long.plus(duration: Duration) = this.instant + duration
 private val Location.age get() = (elapsedRealtimeNanos() - elapsedRealtimeNanos).nanoseconds
 private val Location.string
     get() = run {

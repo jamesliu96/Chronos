@@ -71,4 +71,5 @@ dependencies {
 
     implementation(libs.accompanist.permissions)
     implementation(libs.kotlinx.datetime)
+    implementation(libs.kronos.android)
 }
