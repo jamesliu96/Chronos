@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -87,6 +88,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.lyft.kronos.AndroidClockFactory
 import com.lyft.kronos.KronosClock
+import com.lyft.kronos.SyncListener
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.datetime.Clock.System.now
 import kotlinx.datetime.Instant
@@ -192,7 +194,16 @@ fun App() {
         locationPermissionsState.launchMultiplePermissionRequest()
     }
     val kronosClock = remember {
-        AndroidClockFactory.createKronosClock(context.applicationContext)
+        AndroidClockFactory.createKronosClock(
+            context.applicationContext,
+            syncListener = object : SyncListener {
+                override fun onError(host: String, throwable: Throwable) =
+                    debug("SyncListener", "onError", host, throwable)
+
+                override fun onStartSync(host: String) = debug("SyncListener", "onStartSync", host)
+                override fun onSuccess(ticksDelta: Long, responseTimeMs: Long) =
+                    debug("SyncListener", "onSuccess", ticksDelta, responseTimeMs)
+            })
     }
     LaunchedEffect(Unit) {
         debug("LaunchedEffect", "syncInBackground")
@@ -201,55 +212,25 @@ fun App() {
     ChronosTheme {
         Scaffold(modifier = Modifier.fillMaxSize(), floatingActionButton = {
             if (configuration.orientation == ORIENTATION_LANDSCAPE) Row {
-                AnimatedVisibility(
-                    verbose,
-                    enter = slideInHorizontally { it } + fadeIn(),
-                    exit = slideOutHorizontally { it } + fadeOut(),
-                ) {
-                    SmallFloatingActionButton({ magic = !magic }) {
-                        AnimatedContent(
-                            if (magic) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
-                            label = "",
-                        ) {
-                            Icon(it, null)
-                        }
-                    }
-                }
-                SmallFloatingActionButton({ verbose = !verbose }) {
-                    AnimatedContent(
-                        if (verbose) Icons.Default.Close else Icons.Default.Settings,
-                        transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
-                        label = "",
-                    ) {
-                        Icon(it, null)
-                    }
-                }
+                FloatActionButtons(verbose = verbose,
+                    onVerboseChange = { verbose = it },
+                    magic = magic,
+                    onMagicChange = { magic = it },
+                    landscape = configuration.orientation == ORIENTATION_LANDSCAPE,
+                    onRefresh = {
+                        debug("ManualRefresh", "syncInBackground")
+                        kronosClock.syncInBackground()
+                    })
             } else Column {
-                AnimatedVisibility(
-                    verbose,
-                    enter = slideInVertically { it } + fadeIn(),
-                    exit = slideOutVertically { it } + fadeOut(),
-                ) {
-                    SmallFloatingActionButton({ magic = !magic }) {
-                        AnimatedContent(
-                            if (magic) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
-                            label = "",
-                        ) {
-                            Icon(it, null)
-                        }
-                    }
-                }
-                SmallFloatingActionButton({ verbose = !verbose }) {
-                    AnimatedContent(
-                        if (verbose) Icons.Default.Close else Icons.Default.Settings,
-                        transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
-                        label = "",
-                    ) {
-                        Icon(it, null)
-                    }
-                }
+                FloatActionButtons(verbose = verbose,
+                    onVerboseChange = { verbose = it },
+                    magic = magic,
+                    onMagicChange = { magic = it },
+                    landscape = configuration.orientation == ORIENTATION_LANDSCAPE,
+                    onRefresh = {
+                        debug("ManualRefresh", "syncInBackground")
+                        kronosClock.syncInBackground()
+                    })
             }
         }) { innerPadding ->
             AnimatedVisibility(
@@ -544,6 +525,50 @@ private fun rememberNow() = run {
         }
     }
     now to duration.nanoseconds
+}
+
+@Composable
+private fun FloatActionButtons(
+    verbose: Boolean = false,
+    onVerboseChange: (Boolean) -> Unit = {},
+    magic: Boolean = false,
+    onMagicChange: (Boolean) -> Unit = {},
+    landscape: Boolean = false,
+    onRefresh: () -> Unit = {}
+) {
+    AnimatedVisibility(
+        verbose,
+        enter = (if (landscape) slideInHorizontally { it } else slideInVertically { it }) + fadeIn(),
+        exit = (if (landscape) slideOutHorizontally { it } else slideOutVertically { it }) + fadeOut(),
+    ) {
+        SmallFloatingActionButton({ onRefresh() }) {
+            Icon(Icons.Default.Refresh, null)
+        }
+    }
+    AnimatedVisibility(
+        verbose,
+        enter = (if (landscape) slideInHorizontally { it } else slideInVertically { it }) + fadeIn(),
+        exit = (if (landscape) slideOutHorizontally { it } else slideOutVertically { it }) + fadeOut(),
+    ) {
+        SmallFloatingActionButton({ onMagicChange(!magic) }) {
+            AnimatedContent(
+                if (magic) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
+                label = "",
+            ) {
+                Icon(it, null)
+            }
+        }
+    }
+    SmallFloatingActionButton({ onVerboseChange(!verbose) }) {
+        AnimatedContent(
+            if (verbose) Icons.Default.Close else Icons.Default.Settings,
+            transitionSpec = { scaleIn() + fadeIn() togetherWith scaleOut() + fadeOut() },
+            label = "",
+        ) {
+            Icon(it, null)
+        }
+    }
 }
 
 private data class LocationTime(
