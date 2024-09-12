@@ -12,7 +12,7 @@ kronosAndroid = "0.0.1-alpha11"
 material = "1.12.0"
 lifecycleRuntimeKtx = "2.8.5"
 activityCompose = "1.9.2"
-composeBom = "2024.09.00"
+composeBom = "2024.09.01"
 
 [libraries]
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanistPermissions" }

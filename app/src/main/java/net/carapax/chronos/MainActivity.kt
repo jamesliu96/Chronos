@@ -62,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color.Companion.Red
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -216,9 +217,9 @@ fun App() {
                     onVerboseChange = { verbose = it },
                     magic = magic,
                     onMagicChange = { magic = it },
-                    landscape = configuration.orientation == ORIENTATION_LANDSCAPE,
+                    landscape = true,
                     onRefresh = {
-                        debug("ManualRefresh", "syncInBackground")
+                        debug("onRefresh", "syncInBackground")
                         kronosClock.syncInBackground()
                     })
             } else Column {
@@ -226,9 +227,9 @@ fun App() {
                     onVerboseChange = { verbose = it },
                     magic = magic,
                     onMagicChange = { magic = it },
-                    landscape = configuration.orientation == ORIENTATION_LANDSCAPE,
+                    landscape = false,
                     onRefresh = {
-                        debug("ManualRefresh", "syncInBackground")
+                        debug("onRefresh", "syncInBackground")
                         kronosClock.syncInBackground()
                     })
             }
@@ -368,9 +369,13 @@ private fun LocationTime(
                             lineHeight = 1.em,
                         )
                         AnimatedVisibility(progress) {
-                            LinearProgressIndicator({ (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
+                            LinearProgressIndicator(
+                                { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
                                 modifier = Modifier.padding(bottom = 6.dp),
-                                drawStopIndicator = {})
+                                strokeCap = StrokeCap.Butt,
+                                gapSize = 0.dp,
+                                drawStopIndicator = {},
+                            )
                         }
                         Text(
                             (time - now).formatSeconds(fixedLength),
@@ -452,9 +457,13 @@ private fun LocationTime(
                     lineHeight = 1.em,
                 )
                 AnimatedVisibility(progress) {
-                    LinearProgressIndicator({ (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
+                    LinearProgressIndicator(
+                        { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
                         modifier = Modifier.padding(bottom = 2.dp),
-                        drawStopIndicator = {})
+                        strokeCap = StrokeCap.Butt,
+                        gapSize = 0.dp,
+                        drawStopIndicator = {},
+                    )
                 }
                 Text(
                     (time - now).formatSeconds(fixedLength),

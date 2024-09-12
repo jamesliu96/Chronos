@@ -1,3 +1,3 @@
 # Chronos
 
-GNSS Time Synchronization
+GNSS + NTP Time Synchronization
