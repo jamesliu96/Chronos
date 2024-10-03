@@ -452,14 +452,14 @@ private fun LocationTime(
                 }
                 Text(
                     time.formatLocalTime(fixedLength).annotatedMilliseconds,
-                    fontSize = 20.sp,
+                    fontSize = 30.sp,
                     fontWeight = Bold,
                     lineHeight = 1.em,
                 )
                 AnimatedVisibility(progress) {
                     LinearProgressIndicator(
                         { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
-                        modifier = Modifier.padding(bottom = 2.dp),
+                        modifier = Modifier.padding(bottom = 3.dp),
                         strokeCap = StrokeCap.Butt,
                         gapSize = 0.dp,
                         drawStopIndicator = {},
