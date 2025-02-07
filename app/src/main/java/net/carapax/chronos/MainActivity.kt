@@ -195,8 +195,7 @@ fun App() {
         locationPermissionsState.launchMultiplePermissionRequest()
     }
     val kronosClock = remember {
-        AndroidClockFactory.createKronosClock(
-            context.applicationContext,
+        AndroidClockFactory.createKronosClock(context.applicationContext,
             syncListener = object : SyncListener {
                 override fun onError(host: String, throwable: Throwable) =
                     debug("SyncListener", "onError", host, throwable)
@@ -277,15 +276,17 @@ fun App() {
                 AnimatedVisibility(verbose) {
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                val locationTimeUnavailable =
-                    locationTime?.location?.age?.let { it > 2.seconds } ?: false
+                val satelliteCount = satelliteStatus?.satelliteCount ?: 0
+                val satelliteUsedInFixCount = satelliteStatus?.satelliteUsedInFixCount ?: 0
+                val locationTimeValid =
+                    locationTime?.location?.age?.let { it <= 2.seconds } ?: false && (satelliteCount == 0 || satelliteUsedInFixCount > 0)
                 LocationTime(
                     now = now,
                     label = stringResource(R.string.network),
                     kronosClock = kronosClock,
                     verbose = verbose,
-                    tick = magic && locationTimeUnavailable,
-                    progress = magic && locationTimeUnavailable,
+                    tick = magic && !locationTimeValid,
+                    progress = magic && !locationTimeValid,
                 )
                 AnimatedVisibility(!locationPermissionsState.allPermissionsGranted) {
                     Button(
@@ -348,7 +349,11 @@ private fun LocationTime(
             if (locationTime == null) return@AnimatedVisibility
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 val age = locationTime.location.age
-                AnimatedVisibility(age <= 2.seconds) {
+                val satelliteCount = satelliteStatus?.satelliteCount ?: 0
+                val satelliteUsedInFixCount = satelliteStatus?.satelliteUsedInFixCount ?: 0
+                val locationTimeValid =
+                    age <= 2.seconds && (satelliteCount == 0 || satelliteUsedInFixCount > 0)
+                AnimatedVisibility(locationTimeValid) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         val time = locationTime.time + (now - locationTime.then)
                         if (tick) LaunchedEffect(time.epochSeconds) {
@@ -385,7 +390,7 @@ private fun LocationTime(
                         )
                     }
                 }
-                AnimatedVisibility(age > 2.seconds) {
+                AnimatedVisibility(!locationTimeValid) {
                     AnimatedContent(
                         if (!verbose && !label.isNullOrBlank()) stringResource(
                             R.string.x_no_signal, label
@@ -414,7 +419,7 @@ private fun LocationTime(
                             lineHeight = 1.em,
                         )
                         Text(
-                            "${satelliteStatus?.satelliteUsedInFixCount ?: 0}/${satelliteStatus?.satelliteCount ?: 0}${
+                            "${satelliteUsedInFixCount}/${satelliteCount}${
                                 if (timeToFirstFix != null) " ${
                                     timeToFirstFix.formatSeconds(fixedLength)
                                 }" else ""
@@ -452,14 +457,14 @@ private fun LocationTime(
                 }
                 Text(
                     time.formatLocalTime(fixedLength).annotatedMilliseconds,
-                    fontSize = 30.sp,
+                    fontSize = 48.sp,
                     fontWeight = Bold,
                     lineHeight = 1.em,
                 )
                 AnimatedVisibility(progress) {
                     LinearProgressIndicator(
                         { (time.nanosecondsOfSecond.nanoseconds / 1.seconds).toFloat() },
-                        modifier = Modifier.padding(bottom = 3.dp),
+                        modifier = Modifier.padding(bottom = 6.dp),
                         strokeCap = StrokeCap.Butt,
                         gapSize = 0.dp,
                         drawStopIndicator = {},
